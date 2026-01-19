@@ -74,8 +74,8 @@ async def upsample_audio(request):
                 audio = audio[:, 0] if audio.shape[1] == 2 else audio.mean(axis=1)
             audio = torch.from_numpy(audio).float().unsqueeze(0)
         
-        # Resample to 16kHz using torchaudio kaiser_window (like GPU version)
-        audio_16k = torchaudio.functional.resample(audio, sample_rate, 16000, resampling_method="kaiser_window")
+        # Resample to 16kHz using torchaudio sinc_interp_kaiser (like GPU version)
+        audio_16k = torchaudio.functional.resample(audio, sample_rate, 16000, resampling_method="sinc_interp_kaiser")
         
         lowres_wav = audio_16k.unsqueeze(1).to(upsampler.device)
 
