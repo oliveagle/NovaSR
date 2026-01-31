@@ -5,7 +5,7 @@ Wants=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/bash -c "/mnt/volume3/data/audio/tts_and_enhance/nova_sr/nova_sr.sh >> /home/oliveagle/data/log/nova_sr.log 2>&1"
+ExecStart=/usr/bin/bash -c "/mnt/volume3/data/audio/tts_and_enhance/nova_sr/NovaSR/nova_sr.sh >> /home/oliveagle/data/log/nova_sr.log 2>&1"
 Restart=always
 RestartSec=10
 User=oliveagle
