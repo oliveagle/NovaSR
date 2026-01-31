@@ -1,0 +1,14 @@
+[Unit]
+Description=nova_rs
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/bash -c "/mnt/volume3/data/audio/tts_and_enhance/nova_sr/nova_sr.sh >> /home/oliveagle/data/log/nova_sr.log 2>&1"
+Restart=always
+RestartSec=10
+User=oliveagle
+
+[Install]
+WantedBy=multi-user.target
