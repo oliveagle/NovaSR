@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  novasr-gpu:
+    build:
+      context: .
+      dockerfile: Dockerfile.gpu
+    image: novasr-gpu:latest
+    container_name: novasr-gpu
+    runtime: nvidia
+    environment:
+      - USE_GPU=true
+      - FP16_HALF=true
+      - MODEL_PATH=/models/pytorch_model_v1.bin
+      - NVIDIA_VISIBLE_DEVICES=all
+    ports:
+      - "10999:10999"
+    volumes:
+      # 模型缓存目录
+      - /home/oliveagle/.cache/huggingface:/root/.cache/huggingface:ro
+      # 日志目录
+      - /home/oliveagle/data/log:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10999/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  novasr-cpu:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: novasr-cpu:latest
+    container_name: novasr-cpu
+    environment:
+      - USE_GPU=false
+      - FP16_HALF=false
+      - MODEL_PATH=/models/pytorch_model_v1.bin
+    ports:
+      - "10998:10999"
+    volumes:
+      - /home/oliveagle/.cache/huggingface:/root/.cache/huggingface:ro
+      - /home/oliveagle/data/log:/app/logs
+    restart: unless-stopped
+    profiles:
+      - cpu

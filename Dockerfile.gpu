@@ -1,0 +1,39 @@
+# Dockerfile.gpu - NVIDIA GPU 支持版本
+# 基于 NVIDIA PyTorch 官方镜像，已预装 CUDA 和 PyTorch
+
+FROM nvcr.io/nvidia/pytorch:24.07-py3
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+
+# 安装音频处理依赖
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    libsox-dev \
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 复制依赖文件
+COPY requirements.txt .
+
+# 安装 Python 依赖 (PyTorch 和 CUDA 已预装，只需安装其他依赖)
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 复制项目代码
+COPY . .
+
+# 安装项目本身
+RUN pip install --no-cache-dir -e .
+
+# 暴露服务端口
+EXPOSE 10999
+
+# 设置环境变量默认值
+ENV USE_GPU=true
+ENV FP16_HALF=true
+ENV MODEL_PATH=/home/oliveagle/.cache/huggingface/hub/models--YatharthS--NovaSR/snapshots/08532ca96dad8d73975e2d110d76e0831255bdbf/pytorch_model_v1.bin
+
+# 启动命令
+CMD ["python", "-u", "api.py"]

@@ -1,0 +1,30 @@
+[Unit]
+Description=NovaSR GPU Service (Docker)
+After=docker.service network.target
+Wants=docker.service
+
+[Service]
+Type=simple
+Restart=always
+RestartSec=10
+User=oliveagle
+
+# 使用 docker-compose 或直接 docker 命令启动
+ExecStartPre=-/usr/bin/docker rm -f novasr-gpu
+ExecStart=/usr/bin/docker run \
+    --name novasr-gpu \
+    --runtime=nvidia \
+    --gpus all \
+    -p 10999:10999 \
+    -v /home/oliveagle/.cache/huggingface:/root/.cache/huggingface:ro \
+    -v /home/oliveagle/data/log:/app/logs \
+    -e USE_GPU=true \
+    -e FP16_HALF=true \
+    -e MODEL_PATH=/home/oliveagle/.cache/huggingface/hub/models--YatharthS--NovaSR/snapshots/08532ca96dad8d73975e2d110d76e0831255bdbf/pytorch_model_v1.bin \
+    novasr-gpu:latest
+
+ExecStop=/usr/bin/docker stop -t 30 novasr-gpu
+ExecStopPost=-/usr/bin/docker rm -f novasr-gpu
+
+[Install]
+WantedBy=multi-user.target
