@@ -12,52 +12,67 @@ from NovaSR import FastSR
 
 LOG_FILE = "/home/oliveagle/data/log/nova_sr.log"
 
+
 def log(msg):
     with open(LOG_FILE, "a") as f:
         f.write(msg + "\n")
         f.flush()
 
+
 log("======== Loading model ========")
 
 # Use local model path
-MODEL_PATH = os.environ.get("MODEL_PATH", "/home/oliveagle/.cache/huggingface/hub/models--YatharthS--NovaSR/snapshots/08532ca96dad8d73975e2d110d76e0831255bdbf/pytorch_model_v1.bin")
+MODEL_PATH = os.environ.get(
+    "MODEL_PATH",
+    "/home/oliveagle/.cache/huggingface/hub/models--YatharthS--NovaSR/snapshots/08532ca96dad8d73975e2d110d76e0831255bdbf/pytorch_model_v1.bin",
+)
+
+# GPU configuration: USE_GPU=true enables CUDA, FP16_HALF=true enables half precision
+USE_GPU = os.environ.get("USE_GPU", "true").lower() in ("true", "1", "yes")
+FP16_HALF = os.environ.get("FP16_HALF", "true").lower() in ("true", "1", "yes")
 
 log(f"======== Model path: {MODEL_PATH} ========")
+log(f"======== GPU enabled: {USE_GPU}, FP16: {FP16_HALF} ========")
 
+device = "cuda" if USE_GPU else "cpu"
 upsampler = FastSR(
     ckpt_path=MODEL_PATH,
-    half=False,
+    half=FP16_HALF,
+    device=device,
 )
 
 log("======== Model loaded ========")
 
+
 async def health(request):
     return web.json_response({"status": "ok"})
+
 
 async def upsample_audio(request):
     try:
         data = await request.post()
-        file = data.get('file')
-        
+        file = data.get("file")
+
         if not file:
             return web.json_response({"detail": "No file uploaded"}, status=400)
-        
+
         content_type = file.content_type or ""
-        if not content_type.startswith('audio/'):
+        if not content_type.startswith("audio/"):
             return web.json_response({"detail": "Must be an audio file"}, status=400)
-        
+
         contents = file.file.read()
-        
+
         # Check if WAV file (starts with RIFF)
-        if contents[:4] == b'RIFF':
+        if contents[:4] == b"RIFF":
             import wave
             import tempfile
             import soundfile as sf
+
             # Save to temp file and load with torchaudio
-            with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as tmp:
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
                 tmp.write(contents)
                 tmp_path = tmp.name
-            
+
             try:
                 audio, sample_rate = torchaudio.load(tmp_path)
                 audio = audio[:1, :]  # Take first channel (mono)
@@ -68,16 +83,21 @@ async def upsample_audio(request):
         else:
             # Use soundfile for other formats (MP3, etc.)
             import soundfile as sf
+
             audio, sample_rate = sf.read(io.BytesIO(contents))
             # Ensure mono
             if audio.ndim > 1:
                 audio = audio[:, 0] if audio.shape[1] == 2 else audio.mean(axis=1)
             audio = torch.from_numpy(audio).float().unsqueeze(0)
-        
+
         # Resample to 16kHz using torchaudio sinc_interp_kaiser (like GPU version)
-        audio_16k = torchaudio.functional.resample(audio, sample_rate, 16000, resampling_method="sinc_interp_kaiser")
-        
+        audio_16k = torchaudio.functional.resample(
+            audio, sample_rate, 16000, resampling_method="sinc_interp_kaiser"
+        )
+
         lowres_wav = audio_16k.unsqueeze(1).to(upsampler.device)
+        if upsampler.half:
+            lowres_wav = lowres_wav.half()
 
         with torch.no_grad():
             highres_audio = upsampler.model(lowres_wav).squeeze(0).cpu()
@@ -87,11 +107,11 @@ async def upsample_audio(request):
         buffer = io.BytesIO()
         import wave
 
-        with wave.open(buffer, 'wb') as wav_file:
+        with wave.open(buffer, "wb") as wav_file:
             wav_file.setnchannels(1)
             wav_file.setsampwidth(2)
             wav_file.setframerate(48000)
-            audio_int16 = (highres_numpy * 32767).astype('<i2')
+            audio_int16 = (highres_numpy * 32767).astype("<i2")
             wav_file.writeframes(audio_int16.tobytes())
         buffer.seek(0)
 
@@ -101,15 +121,16 @@ async def upsample_audio(request):
             headers={
                 "Content-Disposition": 'attachment; filename="upsampled_48k.wav"',
                 "Content-Length": str(buffer.tell()),
-            }
+            },
         )
     except Exception as e:
         log(f"Error: {e}")
         return web.json_response({"detail": str(e)}, status=500)
 
-app = web.Application(client_max_size=100*1024*1024)  # 100MB
-app.router.add_get('/health', health)
-app.router.add_post('/upsample', upsample_audio)
+
+app = web.Application(client_max_size=100 * 1024 * 1024)  # 100MB
+app.router.add_get("/health", health)
+app.router.add_post("/upsample", upsample_audio)
 
 if __name__ == "__main__":
     log("======== Starting server on http://0.0.0.0:10999 ========")
